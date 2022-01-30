@@ -1,8 +1,10 @@
-from flask import Flask, redirect, url_for, render_template, request, session, flash, make_response, jsonify
+from flask import Flask, redirect,json, url_for, render_template, request, session, flash, make_response, jsonify
 from datetime import timedelta, datetime, date
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS, cross_origin
+import jsonpickle
+
 
 import time
 
@@ -91,6 +93,16 @@ class Customers(db.Model):
         self.email = email
         self.phone = phone
         self.notes = notes
+        
+    def dump(self):
+            return {"Customers": 
+                        {
+                            'name': self.name,
+                            'address': self.address,
+                            'email': self.email,
+                            'phone': self.phone,
+                            'notes': self.notes,
+                        }}
 
 # Tabla Productos
 
@@ -114,6 +126,17 @@ class Products(db.Model):
         self.cost = cost
         self.price = price
         self.notes = notes
+        
+    def dump(self):
+            return {"Products": 
+                        {
+                            'code': self.code,
+                            'product_name': self.product_name,
+                            'description': self.description,
+                            'cost': self.cost,
+                            'price': self.price,
+                            'notes': self.notes,
+                        }}
 
 
 @app.route("/", methods=['POST'])
@@ -130,8 +153,12 @@ def products():
     price = None
     notes = None
     
-    query_all_products = Products.query.all()
+    res = Products.query.all()
 
+    query_all_products = json.dumps([o.dump() for o in res])
+ 
+    decodedSet = jsonpickle.decode(query_all_products)
+ 
     if request.method == 'POST':
         code = request.json["code"]
         product_name = request.json["productName"]
@@ -151,9 +178,36 @@ def products():
                 'message': 'Successfully Added'
                 })
     else:
-        return redirect(url_for('products'))
+        return jsonify(decodedSet)
 
+@app.route("/deleteproduct/<code>", methods=["DELETE"])
+def deleteproduct(code):
+    print("CODE: "+code)
+    product_to_delete = Products.query.get(code)
+    db.session.delete(product_to_delete)
+    db.session.commit()
+    return 'Done', 201
 
+    """   productId = request.json.get("id")
+    borrar_reg = Products.query.get_or_404(productId)
+    print("PRODUCT ID>>>> "+id)
+    try:
+        db.session.delete(borrar_reg)
+        db.session.commit()
+        
+        return "OK"jsonify({
+                'status': 'OK',
+                'message': 'Successfully Deleted'
+                })
+    except:
+        return jsonify({
+                'status': 'ERROR',
+                'message': 'Error in delete op'
+                })
+    """
+    
+    
+    
 if __name__ == "__main__":
     db.create_all()
     app.run(debug=True)
