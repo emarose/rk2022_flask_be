@@ -1,21 +1,37 @@
-from flask import Flask, redirect,json, url_for, render_template, request, session, flash, make_response, jsonify
+from base64 import decode
+from flask import Flask, redirect, Response, json, url_for, render_template, request, session, flash, make_response, jsonify
 from datetime import timedelta, datetime, date
 from datetime import datetime
-from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS, cross_origin
+# from flask_sqlalchemy import SQLAlchemy
 import jsonpickle
-
-
+from flask_cors import CORS, cross_origin
+from flask_mongoalchemy import MongoAlchemy
 import time
 
-app = Flask(__name__)
-CORS(app)
 
+app = Flask(__name__)
+
+CORS(app)
+app.config['MONGOALCHEMY_DATABASE'] = 'RK2022DB'
+db = MongoAlchemy(app)
 app.secret_key = "SecretKey"
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///RK2022database.sqlite3'
+
+
+class Products(db.Document):
+    code = db.StringField()  # Input / automatico
+    product_name = db.StringField()  # Input
+    description = db.StringField()  # Input
+    cost = db.StringField()  # Input
+    price = db.StringField()  # Input
+    notes = db.StringField()  # Input
+    #image = db.Column(db.String) #
+    def __repr__(self):
+        return '<__main__.Products: '+self.code +' '+ self.product_name+' ' + self.description+' '+self.cost +' '+ self.price+' ' + self.notes
+
+
+""" app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///RK2022database.sqlite3'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
-
 helper_table = db.Table('helper_table',
                         db.Column("id", db.Integer, primary_key=True),
                         db.Column('order_id', db.Integer,
@@ -23,8 +39,6 @@ helper_table = db.Table('helper_table',
                         db.Column('customer_id', db.Integer,
                                   db.ForeignKey('Customers.id')),
                         db.Column('product_id', db.Integer, db.ForeignKey('Products.id')))
-
-
 # Tabla Ventas
 class Orders(db.Model):
     __tablename__ = 'Orders'
@@ -73,10 +87,7 @@ class Orders(db.Model):
         self.shipping_method = shipping_method
         self.shipping_destination = shipping_destination
         self.shipping_tracking = shipping_tracking
-
 # Tabla Clientes
-
-
 class Customers(db.Model):
     __tablename__ = 'Customers'
 
@@ -93,9 +104,9 @@ class Customers(db.Model):
         self.email = email
         self.phone = phone
         self.notes = notes
-        
+
     def dump(self):
-            return {"Customers": 
+            return {"Customers":
                         {
                             'name': self.name,
                             'address': self.address,
@@ -103,10 +114,7 @@ class Customers(db.Model):
                             'phone': self.phone,
                             'notes': self.notes,
                         }}
-
 # Tabla Productos
-
-
 class Products(db.Model):
     __tablename__ = 'Products'
 
@@ -126,9 +134,9 @@ class Products(db.Model):
         self.cost = cost
         self.price = price
         self.notes = notes
-        
+
     def dump(self):
-            return {"Products": 
+            return {"Products":
                         {
                             'code': self.code,
                             'product_name': self.product_name,
@@ -137,77 +145,80 @@ class Products(db.Model):
                             'price': self.price,
                             'notes': self.notes,
                         }}
+ """
 
 
 @app.route("/", methods=['POST'])
 def Home():
     return "Hello World!"
 
-@app.route('/products', methods=['POST', 'GET'])
 
+@app.route('/products', methods=['POST', 'GET'])
 def products():
+    documents = Products.query.all()
+    list = []
+    for x in documents:
+        list.append({"code": x.code,"product_name": x.product_name, "description": x.description,"cost": x.cost,"price": x.price, "notes": x.notes})
+        
+    return jsonify(list)
+
+
+@app.route('/products/add', methods=['POST', 'GET'])
+def add():
     code = None
     product_name = None
     description = None
     cost = None
     price = None
     notes = None
-    
-    res = Products.query.all()
 
-    query_all_products = json.dumps([o.dump() for o in res])
- 
-    decodedSet = jsonpickle.decode(query_all_products)
- 
     if request.method == 'POST':
-        code = request.json["code"]
-        product_name = request.json["productName"]
-        description = request.json["description"]
-        cost = request.json["cost"]
-        price = request.json["price"]  
-        notes = request.json["notes"]
+        req = request.get_json()
 
-        data = [{"code": code, "product_name": product_name, "description": description,
-                 "cost": cost, "price": price, "notes": notes}]
-        
-        db.session.bulk_insert_mappings(Products, data)
-        db.session.commit()
-        
+        code = (req['data']['code'])
+        product_name = (req['data']['product_name'])
+        description = (req['data']['description'])
+        cost = (req['data']['cost'])
+        price = (req['data']['price'])
+        notes = (req['data']['notes'])
+
+        data = Products(code=code, product_name=product_name, description=description,
+                 cost=cost, price=price,notes=notes)
+
+        data.save()
+
         return jsonify({
-                'status': 'OK',
+            'status': 'OK',
                 'message': 'Successfully Added'
-                })
-    else:
-        return jsonify(decodedSet)
+            })
 
-@app.route("/deleteproduct/<code>", methods=["DELETE"])
+
+@app.route("/deleteproduct/<string:code>", methods=["DELETE","POST"])
 def deleteproduct(code):
-    print("CODE: "+code)
-    product_to_delete = Products.query.get(code)
-    db.session.delete(product_to_delete)
-    db.session.commit()
-    return 'Done', 201
+    query = Products.query.filter(Products.code == code).first()
+    query.remove()
 
-    """   productId = request.json.get("id")
-    borrar_reg = Products.query.get_or_404(productId)
-    print("PRODUCT ID>>>> "+id)
-    try:
-        db.session.delete(borrar_reg)
-        db.session.commit()
-        
-        return "OK"jsonify({
-                'status': 'OK',
-                'message': 'Successfully Deleted'
-                })
-    except:
-        return jsonify({
-                'status': 'ERROR',
-                'message': 'Error in delete op'
-                })
-    """
-    
-    
-    
+    return jsonify({
+        'status': 'OK',
+            'message': 'Successfully Deleted'
+        })
+
+
+@app.route("/editproduct/<int:code>", methods=["POST"])
+def editproduct(code):
+    product = Products.query.filter(Products.code == code).first()
+
+    print(product)
+    if request.method == 'POST':
+
+        # product_to_edit = Products.query.filter(Products.code == code).first()
+        # print(product_to_edit)
+
+        # db.session.commit()
+
+        return jsonify(message="POST request returned")
+
+
 if __name__ == "__main__":
-    db.create_all()
+    # db.create_all()
     app.run(debug=True)
